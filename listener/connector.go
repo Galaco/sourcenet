@@ -27,7 +27,7 @@ func (listener *Connector) Register(client *network.Client) {
 	listener.activeClient = client
 }
 
-func (listener *Connector) Receive(msg network.IMessage) {
+func (listener *Connector) Receive(msg network.IMessage, msgType int) {
 	if msg.Connectionless() == false {
 		return
 	}

@@ -1,4 +1,4 @@
-package network
+package sourcenet
 
 import (
 	"sync"
@@ -8,6 +8,7 @@ import (
 type Client struct {
 	// Interface for sendng and receiving data
 	net *Connection
+	channel Channel
 
 	// FIFO queue of received messages from the server to process
 	receivedQueue     []IMessage
@@ -47,8 +48,9 @@ func (client *Client) AddListener(target IListener) {
 // This adds messages to the end of a received queue, so its possible they may be delayed in processing
 func (client *Client) receive() {
 	for true {
+		client.channel.ProcessPacket(client.net.Receive())
 		client.receiveQueueMutex.Lock()
-		client.receivedQueue = append(client.receivedQueue, client.net.Receive())
+		client.receivedQueue = append(client.receivedQueue, client.channel.receivedProcessed...)
 		client.receiveQueueMutex.Unlock()
 	}
 }
@@ -68,8 +70,12 @@ func (client *Client) process() {
 
 		for i = 0; i < queueSize; i++ {
 			// Do actual processing
+			msgType := -1
+			if client.receivedQueue[i].Connectionless() == true {
+				msgType,_ = (bifBuf.NewReader(client.receivedQueue[i].Data()).ReadUnsignedInt32Bits(netMsgTypeBits))
+			}
 			for _, listen := range client.listeners {
-				listen.Receive(client.receivedQueue[i])
+				listen.Receive(client.receivedQueue[i], int(msgType))
 			}
 		}
 

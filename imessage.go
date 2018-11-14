@@ -1,4 +1,4 @@
-package network
+package sourcenet
 
 type IMessage interface {
 	Connectionless() bool // Is this message a connectionless message
