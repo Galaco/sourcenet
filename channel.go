@@ -2,39 +2,40 @@ package sourcenet
 
 import (
 	"github.com/galaco/bitbuf"
+	"github.com/galaco/source-tools-common/crc"
 	"github.com/galaco/sourcenet/message"
 	"github.com/galaco/sourcenet/utils"
 	"log"
 )
 
 type SplitPacket struct {
-	netID int32
+	netID          int32
 	sequenceNumber int32
-	packetID int16
-	splitSize int16
+	packetID       int16
+	splitSize      int16
 }
 
 type DataFragment struct {
-	Filename 	  		  string
-	Buffer	 	  		  []byte
-	SizeInBytes 		  uint32
-	SizeInBits  		  uint32
-	TransferID	  		  uint32	// Used only for files
-	IsCompressed  		  bool		// Is bzip compressed
-	SizeUncompressed 	  uint32
-	AsTCP 		  		  bool		// Send as TCP stream
-	NumFragments  		  int32
-	AcknowledgedFragments int32		// Fragments sent and acknowledges
-	PendingFragments	  int32		// Fragments sent, but not (yet) acknolwedged
-	FragmentOffsets 	  []int32
+	Filename              string
+	Buffer                []byte
+	SizeInBytes           uint32
+	SizeInBits            uint32
+	TransferID            uint32 // Used only for files
+	IsCompressed          bool   // Is bzip compressed
+	SizeUncompressed      uint32
+	AsTCP                 bool // Send as TCP stream
+	NumFragments          int32
+	AcknowledgedFragments int32 // Fragments sent and acknowledges
+	PendingFragments      int32 // Fragments sent, but not (yet) acknolwedged
+	FragmentOffsets       []int32
 }
 
 type SubChannel struct {
-	FirstFragment 		[maxStreams]int32
-	NumFragments 		[maxStreams]int32
+	FirstFragment       [maxStreams]int32
+	NumFragments        [maxStreams]int32
 	SendSequenceCounter int32
-	State 				int32	// 0=free, 1=scheduled to read, 2=send & waiting, 3=dirty
-	Index 				int32	// index into containing channels subchannel array
+	State               int32 // 0=free, 1=scheduled to read, 2=send & waiting, 3=dirty
+	Index               int32 // index into containing channels subchannel array
 }
 
 func (channel *SubChannel) Free() {
@@ -49,32 +50,85 @@ func (channel *SubChannel) Free() {
 // Channel is is responsible for processing received packets into
 // appropriate formats.
 type Channel struct {
-	received	[maxStreams]DataFragment
+	received    [maxStreams]DataFragment
 	subChannels [maxSubChannels]SubChannel
-	waiting		[maxStreams][]*DataFragment
+	waiting     [maxStreams][]*DataFragment
 
-	challengeValue int32
+	challengeValue         int32
 	challengeValueInStream bool
 
-	inSequenceCounter 			   int32
+	inSequenceCounter              int32
+	outSequenceCounter				int32
 	outSequenceAcknowledgedCounter int32
 
-	inReliableState int32
+	inReliableState uint8
 
 	receivedProcessed []IMessage
+}
+
+func (channel *Channel) WritePacketHeader(msg IMessage, subchans bool) IMessage {
+	senddata := bitbuf.NewWriter(len(msg.Data()) + 64) // sufficent space for header & then some
+
+	flags := uint8(0)
+
+	senddata.WriteInt32(channel.outSequenceCounter) // outgoing sequence
+	senddata.WriteInt32(channel.inSequenceCounter) // incoming sequence
+
+	flagOffset := senddata.BitsWritten()
+
+	senddata.WriteByte(0) // flags
+	senddata.WriteUint16(0) // crc16
+
+	checksumStart := senddata.BytesWritten()
+
+	senddata.WriteUint8(channel.inReliableState)
+
+
+	if subchans {
+		flags |= packetFlagReliable
+	}
+
+	senddata.WriteBytes(msg.Data()) // Data
+
+	for senddata.BytesWritten() < minRoutablePayload && senddata.BitsWritten() % 8 != 0 {
+		senddata.WriteUnsignedBitInt32(0, netmsgTypeBits)
+	}
+
+	offset := senddata.BitsWritten()
+	senddata.Seek(flagOffset)
+	senddata.WriteUint8(flags)
+	senddata.Seek(offset)
+
+	if checksumStart < senddata.BytesWritten() {
+		nCheckSumBytes := senddata.BytesWritten() - checksumStart
+		if nCheckSumBytes > 0 {
+
+			checksum := crc.CRC32(senddata.Data()[checksumStart:])
+
+			senddata.Seek(uint(checksumStart * 8))
+			senddata.WriteUint16(checksum)
+			senddata.Seek(senddata.BitsWritten())
+
+			channel.outSequenceCounter++
+
+			return message.NewGeneric(senddata.Data())
+		}
+	}
+
+	return nil
 }
 
 // ProcessPacket Reads received packet header and determines if the
 // packet is ready to be inspected outside on the netcode.
 // Any packet not deemed ready (e.g. split packet) will be queued until it
 // is ready
-func (channel *Channel) ProcessPacket (message IMessage) bool {
+func (channel *Channel) ProcessPacket(message IMessage) bool {
 	if message.Connectionless() == true {
 		return true
 	}
 
 	recvdata := bitbuf.NewReader(message.Data())
-	header,_ := recvdata.ReadUint32()
+	header, _ := recvdata.ReadUint32()
 
 	if header == packetHeaderFlagSplit {
 
@@ -82,7 +136,7 @@ func (channel *Channel) ProcessPacket (message IMessage) bool {
 			return false
 		}
 
-		header,_ = recvdata.ReadUint32();
+		header, _ = recvdata.ReadUint32()
 	}
 
 	if header == packetHeaderFlagCompressed {
@@ -115,8 +169,8 @@ func (channel *Channel) ProcessPacket (message IMessage) bool {
 		return false
 	}
 
-	if flags & packetFlagReliable != 0 {
-		shiftCount,_ := recvdata.ReadUnsignedBitInt32(3)
+	if flags&packetFlagReliable != 0 {
+		shiftCount, _ := recvdata.ReadUint32Bits(3)
 		bit := 1 << shiftCount
 
 		for i := 0; i < maxStreams; i++ {
@@ -127,7 +181,7 @@ func (channel *Channel) ProcessPacket (message IMessage) bool {
 			}
 		}
 
-		channel.inReliableState = int32(utils.FlipBit(uint(channel.inReliableState), bit))
+		channel.inReliableState = uint8(utils.FlipBit(uint(channel.inReliableState), uint(bit)))
 
 		for i := 0; i < maxStreams; i++ {
 			if channel.checkReceivingList(i) == false {
@@ -135,7 +189,6 @@ func (channel *Channel) ProcessPacket (message IMessage) bool {
 			}
 		}
 	}
-
 
 	// @TODO implement me
 	//if channel.NeedsFragments() || flags & packetFlagTables != 0 {
@@ -187,18 +240,19 @@ func (channel *Channel) HandleSplitPacket(recvdata *bitbuf.Reader) int {
 // Returned data is header flags value.
 func (channel *Channel) ReadHeader(msg IMessage) int32 {
 	message := bitbuf.NewReader(msg.Data())
-	sequence,_ := message.ReadInt32()
-	sequenceAcknowledged,_ := message.ReadInt32()
-	flags,_ := message.ReadInt8()
+	sequence, _ := message.ReadInt32()
+	sequenceAcknowledged, _ := message.ReadInt32()
+	flagsI8, _ := message.ReadInt8()
+	flags := int32(flagsI8)
 
 	checksum := uint16(0)
 
 	if !skipChecksum {
-		checksum,_ = message.ReadUint16()
+		checksum, _ = message.ReadUint16()
 
-		offset := message.GetNumBitsRead() >> 3
+		offset := message.BitsRead() >> 3
 		checkSumBytes := message.Data()[offset:len(message.Data())]
-		dataCheckSum := utils.CRC16(checkSumBytes);
+		dataCheckSum := crc.CRC32(checkSumBytes)
 
 		if !skipChecksumValidation {
 			if dataCheckSum != checksum {
@@ -213,12 +267,12 @@ func (channel *Channel) ReadHeader(msg IMessage) int32 {
 
 	numChoked := uint8(0)
 
-	if flags & packetFlagChoked != 0 {
-		numChoked,_ = message.ReadByte()
+	if flags&packetFlagChoked != 0 {
+		numChoked, _ = message.ReadByte()
 	}
 
-	if flags & packetFlagChallenge != 0 {
-		challenge,_ := message.ReadInt32()
+	if flags&packetFlagChallenge != 0 {
+		challenge, _ := message.ReadInt32()
 
 		if channel.challengeValue == 0 {
 			channel.challengeValue = challenge
@@ -245,7 +299,6 @@ func (channel *Channel) ReadHeader(msg IMessage) int32 {
 	channel.inSequenceCounter = sequence
 	channel.outSequenceAcknowledgedCounter = sequenceAcknowledged
 
-
 	for i := 0; i < maxStreams; i++ {
 		channel.checkWaitingList(i)
 	}
@@ -267,8 +320,8 @@ func (channel *Channel) readSubChannelData(buf *bitbuf.Reader, stream int) bool 
 	singleBlock := buf.ReadOneBit() == false // is single block ?
 
 	if singleBlock == false {
-		startFragment,_ = buf.ReadUBitLong(maxFilesizeBits - fragmentBits) // 16 MB max
-		numFragments,_ = buf.ReadUBitLong(3)  // 8 fragments per packet max
+		startFragment, _ = buf.ReadInt32Bits(uint(maxFileSizeBits - fragmentBits)) // 16 MB max
+		numFragments, _ = buf.ReadInt32Bits(3)                                     // 8 fragments per packet max
 		offset = uint(startFragment * fragmentSize)
 		length = uint(numFragments * fragmentSize)
 	}
@@ -283,30 +336,29 @@ func (channel *Channel) readSubChannelData(buf *bitbuf.Reader, stream int) bool 
 			// data compressed ?
 			if buf.ReadOneBit() == true {
 				data.IsCompressed = true
-				data.SizeUncompressed,_ = buf.ReadUBitLong(maxFilesizeBits)
+				data.SizeUncompressed, _ = buf.ReadUint32Bits(maxFileSizeBits)
 			} else {
 				data.IsCompressed = false
 			}
 
-
-			data.SizeInBytes,_ = buf.ReadInt32()
+			data.SizeInBytes, _ = buf.ReadUint32()
 
 		} else {
 			// is it a file ?
 			if buf.ReadOneBit() == true {
-				data.TransferID,_ = buf.ReadUBitLong(32)
-				data.Filename,_ = buf.ReadString(maxOSPath)
+				data.TransferID, _ = buf.ReadUint32Bits(32)
+				data.Filename, _ = buf.ReadString(maxOSPath)
 			}
 
 			// data compressed ?
 			if buf.ReadOneBit() == true {
-				data.IsCompressed = true;
-				data.SizeUncompressed,_ = buf.ReadUBitLong(maxFilesizeBits)
+				data.IsCompressed = true
+				data.SizeUncompressed, _ = buf.ReadUint32Bits(maxFileSizeBits)
 			} else {
-				data.IsCompressed = false;
+				data.IsCompressed = false
 			}
 
-			data.SizeInBytes,_ = buf.ReadUBitLong(maxFilesizeBits);
+			data.SizeInBytes, _ = buf.ReadUint32Bits(maxFileSizeBits)
 
 		}
 
@@ -318,7 +370,7 @@ func (channel *Channel) readSubChannelData(buf *bitbuf.Reader, stream int) bool 
 		data.SizeInBits = data.SizeInBytes * 8
 		data.Buffer = make([]byte, utils.PadNumber(int32(data.SizeInBytes), 4))
 		data.AsTCP = false
-		data.NumFragments = int32((data.SizeInBytes + fragmentSize -1) / fragmentSize)
+		data.NumFragments = int32((data.SizeInBytes + fragmentSize - 1) / fragmentSize)
 		data.AcknowledgedFragments = 0
 
 		if singleBlock {
@@ -329,10 +381,9 @@ func (channel *Channel) readSubChannelData(buf *bitbuf.Reader, stream int) bool 
 		if data.Buffer == nil || len(data.Buffer) == 0 {
 			// This can occur if the packet containing the "header" (offset == 0) is dropped.  Since we need the header to arrive we'll just wait
 			//  for a retry
-			return false;
+			return false
 		}
 	}
-
 
 	if (startFragment + numFragments) == data.NumFragments {
 		// we are receiving the last fragment, adjust length
@@ -342,7 +393,9 @@ func (channel *Channel) readSubChannelData(buf *bitbuf.Reader, stream int) bool 
 		}
 	}
 
-	data.Buffer[offset:],_ = buf.ReadBytes(length) // read data
+	newData,_ := buf.ReadBytes(length)// read data
+
+	data.Buffer = append(data.Buffer[offset:], newData...)
 
 	data.AcknowledgedFragments += numFragments
 
@@ -372,7 +425,6 @@ func (channel *Channel) checkReceivingList(i int) bool {
 		// data = decompressFragments(data)
 	}
 
-
 	if len(data.Filename) == 0 {
 		channel.receivedProcessed = append(channel.receivedProcessed, message.NewGeneric(data.Buffer))
 	} else {
@@ -388,7 +440,6 @@ func (channel *Channel) checkReceivingList(i int) bool {
 
 	return true
 }
-
 
 // checkWaitingList check if a packet waiting to send has
 // been sent
@@ -421,16 +472,21 @@ func (channel *Channel) GetReceivedAndProcessed() []IMessage {
 	return ret
 }
 
-func NewChannel() Channel {
-	channel := Channel{
+func NewChannel() *Channel {
+	channel := &Channel{
 		receivedProcessed: make([]IMessage, 0),
+		inSequenceCounter: 0,
+		outSequenceCounter: 1,
+		outSequenceAcknowledgedCounter: 0,
+		inReliableState: 0,
+		challengeValueInStream: false,
+		challengeValue: 0,
 	}
 
 	for i := 0; i < maxSubChannels; i++ {
-		channel.subChannels[i].Index  = int32(i)
+		channel.subChannels[i].Index = int32(i)
 		channel.subChannels[i].Free()
 	}
-
 
 	return channel
 }

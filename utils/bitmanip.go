@@ -1,7 +1,7 @@
 package utils
 
 func FlipBit(v uint, b uint) uint {
-	if v & b != 0 {
+	if v&b != 0 {
 		v &^= b
 	} else {
 		v |= b
@@ -11,5 +11,5 @@ func FlipBit(v uint, b uint) uint {
 }
 
 func PadNumber(number int32, boundary int32) int32 {
-	return ( ((number) + ((boundary)-1)) / (boundary) ) * (boundary)
+	return (((number) + ((boundary) - 1)) / (boundary)) * (boundary)
 }

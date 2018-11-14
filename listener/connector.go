@@ -5,7 +5,8 @@ import (
 	"github.com/BenLubar/steamworks/steamauth"
 	"github.com/galaco/bitbuf"
 	"github.com/galaco/network"
-	"github.com/galaco/network/message"
+	"github.com/galaco/sourcenet"
+	"github.com/galaco/sourcenet/message"
 	"log"
 )
 
@@ -19,15 +20,15 @@ type Connector struct {
 	clientChallenge int32
 	serverChallenge int32
 
-	activeClient   *network.Client
+	activeClient   *sourcenet.Client
 	connectionStep int32
 }
 
-func (listener *Connector) Register(client *network.Client) {
+func (listener *Connector) Register(client *sourcenet.Client) {
 	listener.activeClient = client
 }
 
-func (listener *Connector) Receive(msg network.IMessage, msgType int) {
+func (listener *Connector) Receive(msg sourcenet.IMessage, msgType int) {
 	if msg.Connectionless() == false {
 		return
 	}
@@ -51,7 +52,7 @@ func (listener *Connector) Receive(msg network.IMessage, msgType int) {
 		steamid64 := uint64(localsid)
 
 		steamKey := make([]byte, 2048)
-		steamKey,_ = steamauth.CreateTicket()
+		steamKey, _ = steamauth.CreateTicket()
 
 		// CREATE NEW PACKET
 		msg := message.ConnectionlessK(
@@ -63,7 +64,7 @@ func (listener *Connector) Receive(msg network.IMessage, msgType int) {
 			steamid64,
 			steamKey)
 
-		listener.activeClient.SendMessage(msg)
+		listener.activeClient.SendMessage(msg, false)
 	case 'B':
 		if listener.connectionStep < 3 {
 			log.Println("Connected successfully")

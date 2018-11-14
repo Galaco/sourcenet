@@ -1,14 +1,15 @@
 package sourcenet
 
 import (
+	"github.com/galaco/bitbuf"
 	"sync"
 )
 
 // Client is a Source Engine multiplayer client
 type Client struct {
 	// Interface for sendng and receiving data
-	net *Connection
-	channel Channel
+	net     *Connection
+	channel *Channel
 
 	// FIFO queue of received messages from the server to process
 	receivedQueue     []IMessage
@@ -35,8 +36,17 @@ func (client *Client) Connect(host string, port string) error {
 }
 
 // SendMessage send a message to connected server
-func (client *Client) SendMessage(msg IMessage) {
+func (client *Client) SendMessage(msg IMessage, hasSubChannels bool) bool {
+	if msg.Connectionless() == false {
+		msg = client.channel.WritePacketHeader(msg, hasSubChannels)
+	}
+
+	if msg == nil {
+		return false
+	}
 	client.net.Send(msg)
+
+	return true
 }
 
 func (client *Client) AddListener(target IListener) {
@@ -70,9 +80,9 @@ func (client *Client) process() {
 
 		for i = 0; i < queueSize; i++ {
 			// Do actual processing
-			msgType := -1
+			msgType := uint32(packetHeaderFlagQuery)
 			if client.receivedQueue[i].Connectionless() == true {
-				msgType,_ = (bifBuf.NewReader(client.receivedQueue[i].Data()).ReadUnsignedInt32Bits(netMsgTypeBits))
+				msgType, _ = bitbuf.NewReader(client.receivedQueue[i].Data()).ReadUint32Bits(netmsgTypeBits)
 			}
 			for _, listen := range client.listeners {
 				listen.Receive(client.receivedQueue[i], int(msgType))
@@ -89,6 +99,7 @@ func (client *Client) process() {
 // NewClient returns a new client object
 func NewClient() *Client {
 	return &Client{
+		channel: NewChannel(),
 		receivedQueue: make([]IMessage, 0),
 		listeners:     make([]IListener, 0),
 	}

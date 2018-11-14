@@ -1,6 +1,5 @@
 package message
 
-
 type File struct {
 	path string
 	data []byte
