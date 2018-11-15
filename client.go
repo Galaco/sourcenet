@@ -60,7 +60,7 @@ func (client *Client) receive() {
 	for true {
 		client.channel.ProcessPacket(client.net.Receive())
 		if client.channel.WaitingOnFragments() == true {
-
+			// @TODO send
 		}
 		client.receiveQueueMutex.Lock()
 		client.receivedQueue = append(client.receivedQueue, client.channel.messages...)

@@ -170,12 +170,12 @@ func (channel *Channel) ProcessPacket(message IMessage) bool {
 
 	recvdata.Seek(0)
 
-	flags := channel.ReadHeader(message)
+	flags, headerSize := channel.ReadHeader(message)
 	if flags == -1 {
 		return false
 	}
 
-	if flags&packetFlagReliable != 0 {
+	if flags & packetFlagReliable != 0 {
 		shiftCount, _ := recvdata.ReadUint32Bits(3)
 		bit := 1 << shiftCount
 
@@ -196,7 +196,7 @@ func (channel *Channel) ProcessPacket(message IMessage) bool {
 		}
 	}
 
-	if channel.WaitingOnFragments() || flags&packetFlagTables != 0 {
+	if channel.WaitingOnFragments() || flags & packetFlagTables != 0 {
 		channel.needFragments = true
 		// immediate fragment request?
 	}
@@ -261,12 +261,12 @@ func (channel *Channel) HandleSplitPacket(recvdata *bitbuf.Reader) int {
 
 // ReadHeader parses the received packet header.
 // Returned data is header flags value.
-func (channel *Channel) ReadHeader(msg IMessage) int32 {
+func (channel *Channel) ReadHeader(msg IMessage) (flags int32, headerSize int32) {
 	message := bitbuf.NewReader(msg.Data())
 	sequence, _ := message.ReadInt32()
 	sequenceAcknowledged, _ := message.ReadInt32()
 	flagsI8, _ := message.ReadInt8()
-	flags := int32(flagsI8)
+	flags = int32(flagsI8)
 
 	checksum := uint16(0)
 
@@ -280,7 +280,7 @@ func (channel *Channel) ReadHeader(msg IMessage) int32 {
 		if skipChecksumValidation == false {
 			if dataCheckSum != checksum {
 				// checksum mismatch
-				return -1
+				return -1,-1
 			}
 		}
 	}
@@ -303,19 +303,19 @@ func (channel *Channel) ReadHeader(msg IMessage) int32 {
 
 		if challenge != channel.challengeValue {
 			// Bad challenge
-			return -1
+			return -1,-1
 		}
 
 		channel.challengeValueInStream = true
 	} else if channel.challengeValueInStream == true {
 		// stream contains challenge, but not provided?
-		return -1
+		return -1,-1
 	}
 
 	droppedPackets := sequence - (channel.inSequenceCounter + int32(numChoked) + 1)
 	if droppedPackets > 0 {
 		if droppedPackets > maxAllowedPacketDrop {
-			return -1
+			return -1,-1
 		}
 	}
 
@@ -330,7 +330,9 @@ func (channel *Channel) ReadHeader(msg IMessage) int32 {
 		flags |= packetFlagTables
 	}
 
-	return flags
+	headerSize = utils.PadNumber(int32(message.BitsRead()), 8) / 8
+
+	return flags,headerSize
 }
 
 // readSubChannelData

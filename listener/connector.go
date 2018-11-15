@@ -9,6 +9,8 @@ import (
 	"log"
 )
 
+const netSignOnState = 6
+
 // Connector is a standard mechanism for connecting to source engine servers
 // Many games implement the same communication, particularly early games. It
 // will handle connectionless back-and-forth with a server, until we get
@@ -36,8 +38,14 @@ func (listener *Connector) Register(client *sourcenet.Client) {
 // received from the connected server.
 func (listener *Connector) Receive(msg sourcenet.IMessage, msgType int) {
 	if msg.Connectionless() == false {
-		return
+		listener.handleConnected(msg, msgType)
 	}
+
+	listener.handleConnectionless(msg)
+}
+
+// handleConnectionless: Connectionless messages handler
+func (listener *Connector) handleConnectionless(msg sourcenet.IMessage) {
 	packet := bitbuf.NewReader(msg.Data())
 
 	packet.ReadInt32() // connectionless header
@@ -92,6 +100,15 @@ func (listener *Connector) Receive(msg sourcenet.IMessage, msgType int) {
 			listener.activeClient.SendMessage(message.NewGeneric(senddata.Data()), false)
 		}
 	}
+}
+
+// handleConnected Connected message handler
+func (listener *Connector) handleConnected(msg sourcenet.IMessage, msgType int) {
+	if msgType != netSignOnState {
+		return
+	}
+
+
 }
 
 func (listener *Connector) InitialMessage() sourcenet.IMessage {
