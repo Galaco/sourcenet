@@ -18,7 +18,6 @@ func (msg *MsgConnectionlessK) Data() []byte {
 
 // Disconnect returns new disconnect packet data
 func ConnectionlessK(clientChallenge int32, serverChallenge int32, playerName string, password string, gameVersion string, steamId uint64, steamKey []byte) *MsgConnectionlessK {
-	buf := bitbuf.NewWriter(1024)
 	senddata := bitbuf.NewWriter(1000)
 	senddata.WriteByte(255)
 	senddata.WriteByte(255)
@@ -45,6 +44,6 @@ func ConnectionlessK(clientChallenge int32, serverChallenge int32, playerName st
 	}
 
 	return &MsgConnectionlessK{
-		buf: buf,
+		buf: senddata,
 	}
 }

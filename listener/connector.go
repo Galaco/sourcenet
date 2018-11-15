@@ -72,7 +72,7 @@ func (listener *Connector) Receive(msg sourcenet.IMessage, msgType int) {
 
 		listener.activeClient.SendMessage(msg, false)
 	case 'B':
-		if listener.connectionStep < 3 {
+		if listener.connectionStep == 2 {
 			log.Println("Connected successfully")
 			listener.connectionStep = 3
 
