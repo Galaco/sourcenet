@@ -17,7 +17,6 @@ func main() {
 	// Connect to host
 	client := sourcenet.NewClient()
 	client.Connect(host, port)
-	defer client.SendMessage(message.Disconnect(), false)
 
 	// Add a receiver for our expected packet type
 	client.AddListener(&QueryInfoReceiver{})
@@ -48,5 +47,12 @@ func (listener *QueryInfoReceiver) Receive(msg sourcenet.IMessage, msgType int) 
 	log.Println("Map: " + props[1])
 	log.Println("Game id: " + props[2])
 	log.Println("Game mode: " + props[3])
-	//log.Printf("Players: %d/%d\n", uint8(props[5][0]), uint8(props[5][1]))
+	// Playercount
+	currentPlayers := 0
+	totalPlayers := int([]byte(props[6])[0])
+	if props[5] != "" {
+		currentPlayers = int([]byte(props[5])[0])
+		totalPlayers = int([]byte(props[5])[1])
+	}
+	log.Printf("Players: %d/%d\n", currentPlayers, totalPlayers)
 }

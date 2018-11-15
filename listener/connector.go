@@ -4,14 +4,15 @@ import (
 	"github.com/BenLubar/steamworks"
 	"github.com/BenLubar/steamworks/steamauth"
 	"github.com/galaco/bitbuf"
-	"github.com/galaco/network"
 	"github.com/galaco/sourcenet"
 	"github.com/galaco/sourcenet/message"
 	"log"
 )
 
 // Connector is a standard mechanism for connecting to source engine servers
-// Many games implement the same communication, particularly early games. If
+// Many games implement the same communication, particularly early games. It
+// will handle connectionless back-and-forth with a server, until we get
+// a successfully connected message back from the server.
 type Connector struct {
 	playerName  string
 	password    string
@@ -24,10 +25,15 @@ type Connector struct {
 	connectionStep int32
 }
 
+// Register provides a mechanism for a listener to respond
+// back to the client. This allows for encapsulation of certain
+// back-and-forth logic for authentication.
 func (listener *Connector) Register(client *sourcenet.Client) {
 	listener.activeClient = client
 }
 
+// Receive is a callback that receives a message that the client
+// received from the connected server.
 func (listener *Connector) Receive(msg sourcenet.IMessage, msgType int) {
 	if msg.Connectionless() == false {
 		return
@@ -70,8 +76,6 @@ func (listener *Connector) Receive(msg sourcenet.IMessage, msgType int) {
 			log.Println("Connected successfully")
 			listener.connectionStep = 3
 
-			//client.channel.PrepareStreams()
-
 			senddata := bitbuf.NewWriter(2048)
 
 			senddata.WriteUnsignedBitInt32(6, 6)
@@ -85,14 +89,12 @@ func (listener *Connector) Receive(msg sourcenet.IMessage, msgType int) {
 			senddata.WriteString("vban 0 0 0 0")
 			senddata.WriteByte(0)
 
-			// @TODO Implement non-connectionless packet headers
-			// Until this is done, the server wont start sending us stuff
-			listener.activeClient.SendMessage(message.NewMessage(senddata.Data()))
+			listener.activeClient.SendMessage(message.NewGeneric(senddata.Data()), false)
 		}
 	}
 }
 
-func (listener *Connector) InitialMessage() network.IMessage {
+func (listener *Connector) InitialMessage() sourcenet.IMessage {
 	return message.ConnectionlessQ(listener.clientChallenge)
 }
 

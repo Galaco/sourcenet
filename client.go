@@ -38,7 +38,7 @@ func (client *Client) Connect(host string, port string) error {
 // SendMessage send a message to connected server
 func (client *Client) SendMessage(msg IMessage, hasSubChannels bool) bool {
 	if msg.Connectionless() == false {
-		msg = client.channel.WritePacketHeader(msg, hasSubChannels)
+		msg = client.channel.WriteHeader(msg, hasSubChannels)
 	}
 
 	if msg == nil {
@@ -59,8 +59,11 @@ func (client *Client) AddListener(target IListener) {
 func (client *Client) receive() {
 	for true {
 		client.channel.ProcessPacket(client.net.Receive())
+		if client.channel.WaitingOnFragments() == true {
+
+		}
 		client.receiveQueueMutex.Lock()
-		client.receivedQueue = append(client.receivedQueue, client.channel.receivedProcessed...)
+		client.receivedQueue = append(client.receivedQueue, client.channel.messages...)
 		client.receiveQueueMutex.Unlock()
 	}
 }
@@ -99,7 +102,7 @@ func (client *Client) process() {
 // NewClient returns a new client object
 func NewClient() *Client {
 	return &Client{
-		channel: NewChannel(),
+		channel:       NewChannel(),
 		receivedQueue: make([]IMessage, 0),
 		listeners:     make([]IListener, 0),
 	}

@@ -8,6 +8,7 @@ import (
 	"log"
 )
 
+// SplitPacket is a case when a message can contain multiple packet types
 type SplitPacket struct {
 	netID          int32
 	sequenceNumber int32
@@ -15,6 +16,7 @@ type SplitPacket struct {
 	splitSize      int16
 }
 
+// DataFragment is used for receiving files from the server. Since files are almost certainly
 type DataFragment struct {
 	Filename              string
 	Buffer                []byte
@@ -58,31 +60,34 @@ type Channel struct {
 	challengeValueInStream bool
 
 	inSequenceCounter              int32
-	outSequenceCounter				int32
+	outSequenceCounter             int32
 	outSequenceAcknowledgedCounter int32
 
 	inReliableState uint8
 
-	receivedProcessed []IMessage
+	messages      []IMessage
+	needFragments bool
 }
 
-func (channel *Channel) WritePacketHeader(msg IMessage, subchans bool) IMessage {
+// WriteHeader writes header bytes to a message, then
+// returns the modified message.
+// Returns nil if there is 0 bytes to generate checksum against (ie empty body)
+func (channel *Channel) WriteHeader(msg IMessage, subchans bool) IMessage {
 	senddata := bitbuf.NewWriter(len(msg.Data()) + 64) // sufficent space for header & then some
 
 	flags := uint8(0)
 
 	senddata.WriteInt32(channel.outSequenceCounter) // outgoing sequence
-	senddata.WriteInt32(channel.inSequenceCounter) // incoming sequence
+	senddata.WriteInt32(channel.inSequenceCounter)  // incoming sequence
 
 	flagOffset := senddata.BitsWritten()
 
-	senddata.WriteByte(0) // flags
+	senddata.WriteByte(0)   // flags
 	senddata.WriteUint16(0) // crc16
 
 	checksumStart := senddata.BytesWritten()
 
 	senddata.WriteUint8(channel.inReliableState)
-
 
 	if subchans {
 		flags |= packetFlagReliable
@@ -90,7 +95,7 @@ func (channel *Channel) WritePacketHeader(msg IMessage, subchans bool) IMessage 
 
 	senddata.WriteBytes(msg.Data()) // Data
 
-	for senddata.BytesWritten() < minRoutablePayload && senddata.BitsWritten() % 8 != 0 {
+	for senddata.BytesWritten() < minRoutablePayload && senddata.BitsWritten()%8 != 0 {
 		senddata.WriteUnsignedBitInt32(0, netmsgTypeBits)
 	}
 
@@ -124,6 +129,7 @@ func (channel *Channel) WritePacketHeader(msg IMessage, subchans bool) IMessage 
 // is ready
 func (channel *Channel) ProcessPacket(message IMessage) bool {
 	if message.Connectionless() == true {
+		channel.messages = append(channel.messages, message)
 		return true
 	}
 
@@ -190,13 +196,30 @@ func (channel *Channel) ProcessPacket(message IMessage) bool {
 		}
 	}
 
-	// @TODO implement me
-	//if channel.NeedsFragments() || flags & packetFlagTables != 0 {
-	//	neededfragments = true
-	//	NET_RequestFragments()
-	//}
+	if channel.WaitingOnFragments() || flags&packetFlagTables != 0 {
+		channel.needFragments = true
+		// immediate fragment request?
+	}
 
 	return true
+}
+
+func (channel *Channel) WaitingOnFragments() bool {
+	for i := 0; i < maxStreams; i++ {
+		data := &channel.received[i] // get list
+
+		if data != nil && data.NumFragments != 0 {
+			channel.needFragments = true
+			return true
+		}
+	}
+
+	if channel.needFragments {
+		channel.needFragments = false
+		return true
+	}
+
+	return false
 }
 
 // HandleSplitPacket process a packet that contains multiple entries
@@ -247,14 +270,14 @@ func (channel *Channel) ReadHeader(msg IMessage) int32 {
 
 	checksum := uint16(0)
 
-	if !skipChecksum {
+	if skipChecksum == false {
 		checksum, _ = message.ReadUint16()
 
 		offset := message.BitsRead() >> 3
 		checkSumBytes := message.Data()[offset:len(message.Data())]
 		dataCheckSum := crc.CRC32(checkSumBytes)
 
-		if !skipChecksumValidation {
+		if skipChecksumValidation == false {
 			if dataCheckSum != checksum {
 				// checksum mismatch
 				return -1
@@ -310,6 +333,7 @@ func (channel *Channel) ReadHeader(msg IMessage) int32 {
 	return flags
 }
 
+// readSubChannelData
 func (channel *Channel) readSubChannelData(buf *bitbuf.Reader, stream int) bool {
 	data := &channel.received[stream] // get list
 	startFragment := int32(0)
@@ -379,8 +403,9 @@ func (channel *Channel) readSubChannelData(buf *bitbuf.Reader, stream int) bool 
 		}
 	} else {
 		if data.Buffer == nil || len(data.Buffer) == 0 {
-			// This can occur if the packet containing the "header" (offset == 0) is dropped.  Since we need the header to arrive we'll just wait
-			//  for a retry
+			// This can occur if the packet containing the "header" (offset == 0) is dropped.
+			// Since we need the header to arrive we'll just wait
+			// for a retry
 			return false
 		}
 	}
@@ -393,7 +418,7 @@ func (channel *Channel) readSubChannelData(buf *bitbuf.Reader, stream int) bool 
 		}
 	}
 
-	newData,_ := buf.ReadBytes(length)// read data
+	newData, _ := buf.ReadBytes(length) // read data
 
 	data.Buffer = append(data.Buffer[offset:], newData...)
 
@@ -426,9 +451,9 @@ func (channel *Channel) checkReceivingList(i int) bool {
 	}
 
 	if len(data.Filename) == 0 {
-		channel.receivedProcessed = append(channel.receivedProcessed, message.NewGeneric(data.Buffer))
+		channel.messages = append(channel.messages, message.NewGeneric(data.Buffer))
 	} else {
-		channel.receivedProcessed = append(channel.receivedProcessed, message.NewFile(data.Filename, data.Buffer))
+		channel.messages = append(channel.messages, message.NewFile(data.Filename, data.Buffer))
 	}
 
 	// clean list
@@ -466,21 +491,24 @@ func (channel *Channel) checkWaitingList(i int) {
 	}
 }
 
-func (channel *Channel) GetReceivedAndProcessed() []IMessage {
-	ret := channel.receivedProcessed
-	channel.receivedProcessed = make([]IMessage, 0)
+// GetMessages returns all received complete messages (ie packets that
+// are not waiting for fragments)
+func (channel *Channel) GetMessages() []IMessage {
+	ret := channel.messages
+	channel.messages = make([]IMessage, 0)
 	return ret
 }
 
+// NewChannel return a new channel struct
 func NewChannel() *Channel {
 	channel := &Channel{
-		receivedProcessed: make([]IMessage, 0),
-		inSequenceCounter: 0,
-		outSequenceCounter: 1,
+		messages:                       make([]IMessage, 0),
+		inSequenceCounter:              0,
+		outSequenceCounter:             1,
 		outSequenceAcknowledgedCounter: 0,
-		inReliableState: 0,
-		challengeValueInStream: false,
-		challengeValue: 0,
+		inReliableState:                0,
+		challengeValueInStream:         false,
+		challengeValue:                 0,
 	}
 
 	for i := 0; i < maxSubChannels; i++ {
