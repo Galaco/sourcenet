@@ -3,7 +3,7 @@ package message
 import "github.com/galaco/bitbuf"
 
 type MsgDisconnect struct {
-	buf *bitbuf.Writer
+	buf []byte
 }
 
 // Connectionless: is this message a connectionless message?
@@ -13,7 +13,7 @@ func (msg *MsgDisconnect) Connectionless() bool {
 
 // Data Get packet data
 func (msg *MsgDisconnect) Data() []byte {
-	return msg.buf.Data()
+	return msg.buf
 }
 
 // Disconnect returns new disconnect packet data
@@ -25,6 +25,6 @@ func Disconnect() *MsgDisconnect {
 	buf.WriteByte(0)
 
 	return &MsgDisconnect{
-		buf: buf,
+		buf: buf.Data(),
 	}
 }
