@@ -1,7 +1,7 @@
-package network
+package sourcenet
 
 import (
-	"github.com/galaco/network/message"
+	"github.com/galaco/sourcenet/message"
 	"net"
 )
 
@@ -20,7 +20,7 @@ func (conn *Connection) Send(msg IMessage) (length int, err error) {
 func (conn *Connection) Receive() IMessage {
 	buf := make([]byte, 2048)
 	conn.proto.Read(buf)
-	return message.NewMessage(buf)
+	return message.NewGeneric(buf)
 }
 
 // Connect: Establishes a connection with a server.

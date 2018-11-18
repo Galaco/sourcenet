@@ -10,7 +10,7 @@ type MsgQueryServerInfo struct {
 
 // Connectionless: is this message a connectionless message?
 func (msg *MsgQueryServerInfo) Connectionless() bool {
-	return false
+	return true
 }
 
 // Data Get packet data

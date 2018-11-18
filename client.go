@@ -1,13 +1,15 @@
-package network
+package sourcenet
 
 import (
+	"github.com/galaco/bitbuf"
 	"sync"
 )
 
 // Client is a Source Engine multiplayer client
 type Client struct {
 	// Interface for sendng and receiving data
-	net *Connection
+	net     *Connection
+	channel *Channel
 
 	// FIFO queue of received messages from the server to process
 	receivedQueue     []IMessage
@@ -34,8 +36,17 @@ func (client *Client) Connect(host string, port string) error {
 }
 
 // SendMessage send a message to connected server
-func (client *Client) SendMessage(msg IMessage) {
+func (client *Client) SendMessage(msg IMessage, hasSubChannels bool) bool {
+	if msg.Connectionless() == false {
+		msg = client.channel.WriteHeader(msg, hasSubChannels)
+	}
+
+	if msg == nil {
+		return false
+	}
 	client.net.Send(msg)
+
+	return true
 }
 
 func (client *Client) AddListener(target IListener) {
@@ -47,8 +58,12 @@ func (client *Client) AddListener(target IListener) {
 // This adds messages to the end of a received queue, so its possible they may be delayed in processing
 func (client *Client) receive() {
 	for true {
+		client.channel.ProcessPacket(client.net.Receive())
+		if client.channel.WaitingOnFragments() == true {
+			// @TODO send
+		}
 		client.receiveQueueMutex.Lock()
-		client.receivedQueue = append(client.receivedQueue, client.net.Receive())
+		client.receivedQueue = append(client.receivedQueue, client.channel.GetMessages()...)
 		client.receiveQueueMutex.Unlock()
 	}
 }
@@ -68,8 +83,12 @@ func (client *Client) process() {
 
 		for i = 0; i < queueSize; i++ {
 			// Do actual processing
+			msgType := uint32(packetHeaderFlagQuery)
+			if client.receivedQueue[i].Connectionless() == true {
+				msgType, _ = bitbuf.NewReader(client.receivedQueue[i].Data()).ReadUint32Bits(netmsgTypeBits)
+			}
 			for _, listen := range client.listeners {
-				listen.Receive(client.receivedQueue[i])
+				listen.Receive(client.receivedQueue[i], int(msgType))
 			}
 		}
 
@@ -83,6 +102,7 @@ func (client *Client) process() {
 // NewClient returns a new client object
 func NewClient() *Client {
 	return &Client{
+		channel:       NewChannel(),
 		receivedQueue: make([]IMessage, 0),
 		listeners:     make([]IListener, 0),
 	}

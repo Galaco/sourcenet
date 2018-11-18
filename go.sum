@@ -1,0 +1,7 @@
+github.com/BenLubar/steamworks v0.0.0-20181009034830-72424b225176 h1:i6jdC5MIF6J6ZS4qp8KHgjXW1j4Mdye3IsJXPaQdoFM=
+github.com/BenLubar/steamworks v0.0.0-20181009034830-72424b225176/go.mod h1:5j6rsEIGbqzfqPqMe6U/RyzWTzrxmmXtT7IlStA/KsI=
+github.com/galaco/bitbuf v0.0.0-20181114213158-4a631295de82 h1:vW1FZKNU5tsbBtD5sWTQH0Vzzx1+bJG61Lh4dAq1eDk=
+github.com/galaco/bitbuf v0.0.0-20181114213158-4a631295de82/go.mod h1:3bfABzFKOBjqc65R3yDEqDm09NVE+VJwnT2wBNOt2jg=
+github.com/galaco/source-tools-common v0.0.0-20181114203108-b70b8e75c546 h1:zWNJVV0bFq+/O7nMK+AJfCXCD4V5vhwukgt/F9TeBa0=
+github.com/galaco/source-tools-common v0.0.0-20181114203108-b70b8e75c546/go.mod h1:vcKoSJ6VLGuLDPp2ptTTb1J7D51w5+t02EqlNtwMDLI=
+golang.org/x/tools v0.0.0-20181009034425-a2b3f7f249e9/go.mod h1:n7NCudcB/nEzxVGmLbDWY5pfWTLqBcC2KZ6jyYvM4mQ=
