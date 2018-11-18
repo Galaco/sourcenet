@@ -73,7 +73,7 @@ type Channel struct {
 // returns the modified message.
 // Returns nil if there is 0 bytes to generate checksum against (ie empty body)
 func (channel *Channel) WriteHeader(msg IMessage, subchans bool) IMessage {
-	senddata := bitbuf.NewWriter(len(msg.Data()) + 64) // sufficent space for header & then some
+	senddata := bitbuf.NewWriter(len(msg.Data()) + 64) // sufficient space for header & then some
 
 	flags := uint8(0)
 
@@ -94,8 +94,7 @@ func (channel *Channel) WriteHeader(msg IMessage, subchans bool) IMessage {
 	}
 
 	senddata.WriteBytes(msg.Data()) // Data
-
-	for senddata.BytesWritten() < minRoutablePayload && senddata.BitsWritten()%8 != 0 {
+	for senddata.BytesWritten() < minRoutablePayload && senddata.BitsWritten() % 8 != 0 {
 		senddata.WriteUnsignedBitInt32(0, netmsgTypeBits)
 	}
 
@@ -107,7 +106,6 @@ func (channel *Channel) WriteHeader(msg IMessage, subchans bool) IMessage {
 	if checksumStart < senddata.BytesWritten() {
 		nCheckSumBytes := senddata.BytesWritten() - checksumStart
 		if nCheckSumBytes > 0 {
-
 			checksum := crc.CRC32(senddata.Data()[checksumStart:])
 
 			senddata.Seek(uint(checksumStart * 8))

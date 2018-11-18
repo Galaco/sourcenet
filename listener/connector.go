@@ -58,7 +58,6 @@ func (listener *Connector) handleConnectionless(msg sourcenet.IMessage) {
 
 	packetType, _ := packet.ReadUint8()
 
-	log.Println(packetType)
 	switch packetType {
 	// 'A' is connection request acknowledgement.
 	// We are required to authenicate game ownership now.

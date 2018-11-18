@@ -37,10 +37,9 @@ func (client *Client) Connect(host string, port string) error {
 
 // SendMessage send a message to connected server
 func (client *Client) SendMessage(msg IMessage, hasSubChannels bool) bool {
-	if msg.Connectionless() == false {
+	if msg == nil || msg.Connectionless() == false {
 		msg = client.channel.WriteHeader(msg, hasSubChannels)
 	}
-
 	if msg == nil {
 		return false
 	}
