@@ -20,9 +20,9 @@ func (msg *MsgDisconnect) Data() []byte {
 func Disconnect() *MsgDisconnect {
 	buf := bitbuf.NewWriter(1024)
 
-	buf.WriteUnsignedBitInt32(1, 6)
+	buf.WriteUint8(1)
 	buf.WriteString("Disconnect by User.")
-	buf.WriteByte(0)
+	buf.WriteByte(0xC0)
 
 	return &MsgDisconnect{
 		buf: buf.Data(),
