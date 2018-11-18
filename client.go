@@ -63,7 +63,7 @@ func (client *Client) receive() {
 			// @TODO send
 		}
 		client.receiveQueueMutex.Lock()
-		client.receivedQueue = append(client.receivedQueue, client.channel.messages...)
+		client.receivedQueue = append(client.receivedQueue, client.channel.GetMessages()...)
 		client.receiveQueueMutex.Unlock()
 	}
 }

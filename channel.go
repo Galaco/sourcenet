@@ -127,13 +127,13 @@ func (channel *Channel) WriteHeader(msg IMessage, subchans bool) IMessage {
 // packet is ready to be inspected outside on the netcode.
 // Any packet not deemed ready (e.g. split packet) will be queued until it
 // is ready
-func (channel *Channel) ProcessPacket(message IMessage) bool {
-	if message.Connectionless() == true {
-		channel.messages = append(channel.messages, message)
+func (channel *Channel) ProcessPacket(msg IMessage) bool {
+	if msg.Connectionless() == true {
+		channel.messages = append(channel.messages, msg)
 		return true
 	}
 
-	recvdata := bitbuf.NewReader(message.Data())
+	recvdata := bitbuf.NewReader(msg.Data())
 	header, _ := recvdata.ReadUint32()
 
 	if header == packetHeaderFlagSplit {
@@ -148,7 +148,7 @@ func (channel *Channel) ProcessPacket(message IMessage) bool {
 	if header == packetHeaderFlagCompressed {
 		log.Println("Unsupported compressed packet")
 		return false
-		//uncompressedSize := len(message.Data()) * 16;
+		//uncompressedSize := len(msg.Data()) * 16;
 		//
 		//char*tmpbuffer = new char[uncompressedSize];
 		//
@@ -170,12 +170,12 @@ func (channel *Channel) ProcessPacket(message IMessage) bool {
 
 	recvdata.Seek(0)
 
-	flags, headerSize := channel.ReadHeader(message)
+	flags, headerSize := channel.ReadHeader(msg)
 	if flags == -1 {
 		return false
 	}
 
-	if flags & packetFlagReliable != 0 {
+	if flags&packetFlagReliable != 0 {
 		shiftCount, _ := recvdata.ReadUint32Bits(3)
 		bit := 1 << shiftCount
 
@@ -196,7 +196,11 @@ func (channel *Channel) ProcessPacket(message IMessage) bool {
 		}
 	}
 
-	if channel.WaitingOnFragments() || flags & packetFlagTables != 0 {
+	if len(msg.Data()[headerSize:]) > 0 {
+		channel.messages = append(channel.messages, message.NewGeneric(msg.Data()[headerSize:]))
+	}
+
+	if channel.WaitingOnFragments() || flags&packetFlagTables != 0 {
 		channel.needFragments = true
 		// immediate fragment request?
 	}
@@ -280,7 +284,7 @@ func (channel *Channel) ReadHeader(msg IMessage) (flags int32, headerSize int32)
 		if skipChecksumValidation == false {
 			if dataCheckSum != checksum {
 				// checksum mismatch
-				return -1,-1
+				return -1, -1
 			}
 		}
 	}
@@ -303,19 +307,19 @@ func (channel *Channel) ReadHeader(msg IMessage) (flags int32, headerSize int32)
 
 		if challenge != channel.challengeValue {
 			// Bad challenge
-			return -1,-1
+			return -1, -1
 		}
 
 		channel.challengeValueInStream = true
 	} else if channel.challengeValueInStream == true {
 		// stream contains challenge, but not provided?
-		return -1,-1
+		return -1, -1
 	}
 
 	droppedPackets := sequence - (channel.inSequenceCounter + int32(numChoked) + 1)
 	if droppedPackets > 0 {
 		if droppedPackets > maxAllowedPacketDrop {
-			return -1,-1
+			return -1, -1
 		}
 	}
 
@@ -332,7 +336,7 @@ func (channel *Channel) ReadHeader(msg IMessage) (flags int32, headerSize int32)
 
 	headerSize = utils.PadNumber(int32(message.BitsRead()), 8) / 8
 
-	return flags,headerSize
+	return flags, headerSize
 }
 
 // readSubChannelData

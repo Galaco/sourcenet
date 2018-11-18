@@ -44,6 +44,12 @@ func (listener *Connector) Receive(msg sourcenet.IMessage, msgType int) {
 	listener.handleConnectionless(msg)
 }
 
+// InitialMessage Get the first message to initialize
+// server authentication before connection.
+func (listener *Connector) InitialMessage() sourcenet.IMessage {
+	return message.ConnectionlessQ(listener.clientChallenge)
+}
+
 // handleConnectionless: Connectionless messages handler
 func (listener *Connector) handleConnectionless(msg sourcenet.IMessage) {
 	packet := bitbuf.NewReader(msg.Data())
@@ -52,7 +58,10 @@ func (listener *Connector) handleConnectionless(msg sourcenet.IMessage) {
 
 	packetType, _ := packet.ReadUint8()
 
+	log.Println(packetType)
 	switch packetType {
+	// 'A' is connection request acknowledgement.
+	// We are required to authenicate game ownership now.
 	case 'A':
 		listener.connectionStep = 2
 		packet.ReadInt32()
@@ -64,11 +73,9 @@ func (listener *Connector) handleConnectionless(msg sourcenet.IMessage) {
 
 		localsid := steamworks.GetSteamID()
 		steamid64 := uint64(localsid)
-
 		steamKey := make([]byte, 2048)
 		steamKey, _ = steamauth.CreateTicket()
 
-		// CREATE NEW PACKET
 		msg := message.ConnectionlessK(
 			listener.clientChallenge,
 			listener.serverChallenge,
@@ -79,6 +86,8 @@ func (listener *Connector) handleConnectionless(msg sourcenet.IMessage) {
 			steamKey)
 
 		listener.activeClient.SendMessage(msg, false)
+	// 'B' is successful authentication.
+	// Now send some user info bits.
 	case 'B':
 		if listener.connectionStep == 2 {
 			log.Println("Connected successfully")
@@ -99,6 +108,14 @@ func (listener *Connector) handleConnectionless(msg sourcenet.IMessage) {
 
 			listener.activeClient.SendMessage(message.NewGeneric(senddata.Data()), false)
 		}
+	// '9' Connection was refused. A reason
+	// is usually provided.
+	case '9':
+		packet.ReadInt32() // Not needed
+		reason, _ := packet.ReadString(1024)
+		log.Printf("Connection refused. Reason: %s\n", reason)
+	default:
+		return
 	}
 }
 
@@ -107,14 +124,9 @@ func (listener *Connector) handleConnected(msg sourcenet.IMessage, msgType int) 
 	if msgType != netSignOnState {
 		return
 	}
-
-
 }
 
-func (listener *Connector) InitialMessage() sourcenet.IMessage {
-	return message.ConnectionlessQ(listener.clientChallenge)
-}
-
+// NewConnector returns a new connector object.
 func NewConnector(playerName string, password string, gameVersion string, clientChallenge int32) *Connector {
 	return &Connector{
 		playerName:      playerName,
