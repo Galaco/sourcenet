@@ -39,9 +39,10 @@ func (listener *Connector) Register(client *sourcenet.Client) {
 func (listener *Connector) Receive(msg sourcenet.IMessage, msgType int) {
 	if msg.Connectionless() == false {
 		listener.handleConnected(msg, msgType)
+	} else {
+		listener.handleConnectionless(msg)
 	}
 
-	listener.handleConnectionless(msg)
 }
 
 // InitialMessage Get the first message to initialize
@@ -120,14 +121,16 @@ func (listener *Connector) handleConnectionless(msg sourcenet.IMessage) {
 
 // handleConnected Connected message handler
 func (listener *Connector) handleConnected(msg sourcenet.IMessage, msgType int) {
+	log.Println(msgType)
 	if msgType != netSignOnState {
 		return
 	}
 }
 
 // NewConnector returns a new connector object.
-func NewConnector(playerName string, password string, gameVersion string, clientChallenge int32) *Connector {
+func NewConnector(activeClient *sourcenet.Client, playerName string, password string, gameVersion string, clientChallenge int32) *Connector {
 	return &Connector{
+		activeClient: activeClient,
 		playerName:      playerName,
 		password:        password,
 		gameVersion:     gameVersion,

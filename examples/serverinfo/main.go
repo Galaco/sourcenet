@@ -35,10 +35,6 @@ func main() {
 type QueryInfoReceiver struct {
 }
 
-func (listener *QueryInfoReceiver) Register(client *sourcenet.Client) {
-
-}
-
 func (listener *QueryInfoReceiver) Receive(msg sourcenet.IMessage, msgType int) {
 	data := msg.Data()
 

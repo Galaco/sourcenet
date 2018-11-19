@@ -31,7 +31,7 @@ func main() {
 	gameVersion := "4630212"
 	clientChallenge := int32(167679079)
 
-	connector := listener.NewConnector(playerName, password, gameVersion, clientChallenge)
+	connector := listener.NewConnector(client, playerName, password, gameVersion, clientChallenge)
 	client.AddListener(connector)
 
 	// Send request to server
