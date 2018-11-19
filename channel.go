@@ -40,6 +40,7 @@ type SubChannel struct {
 	Index               int32 // index into containing channels subchannel array
 }
 
+// Free clears any data in this subchannel
 func (channel *SubChannel) Free() {
 	channel.State = subChannelFree
 	channel.SendSequenceCounter = -1
@@ -94,7 +95,7 @@ func (channel *Channel) WriteHeader(msg IMessage, subchans bool) IMessage {
 	}
 
 	senddata.WriteBytes(msg.Data()) // Data
-	for senddata.BytesWritten() < minRoutablePayload && senddata.BitsWritten() % 8 != 0 {
+	for senddata.BytesWritten() < minRoutablePayload && senddata.BitsWritten()%8 != 0 {
 		senddata.WriteUnsignedBitInt32(0, netmsgTypeBits)
 	}
 
@@ -146,6 +147,9 @@ func (channel *Channel) ProcessPacket(msg IMessage) bool {
 	if header == packetHeaderFlagCompressed {
 		log.Println("Unsupported compressed packet")
 		return false
+
+		//uncompressed := utils.LZSSDecompress(recvdata.Data())
+
 		//uncompressedSize := len(msg.Data()) * 16;
 		//
 		//char*tmpbuffer = new char[uncompressedSize];
@@ -349,7 +353,7 @@ func (channel *Channel) readSubChannelData(buf *bitbuf.Reader, stream int) bool 
 
 	if singleBlock == false {
 		startFragment, _ = buf.ReadInt32Bits(uint(maxFileSizeBits - fragmentBits)) // 16 MB max
-		numFragments, _ = buf.ReadInt32Bits(3)                                     // 8 fragments per packet max
+		numFragments, _ = buf.ReadInt32Bits(3)    // 8 fragments per packet max
 		offset = uint(startFragment * fragmentSize)
 		length = uint(numFragments * fragmentSize)
 	}
@@ -451,7 +455,7 @@ func (channel *Channel) checkReceivingList(i int) bool {
 
 	if data.IsCompressed == true {
 		// decompress
-		// data = decompressFragments(data)
+		data = channel.decompressFragment(data)
 	}
 
 	if len(data.Filename) == 0 {
@@ -493,6 +497,29 @@ func (channel *Channel) checkWaitingList(i int) {
 		// More fragments acknowledged than there are?
 		return
 	}
+}
+
+func (channel *Channel) decompressFragment(data *DataFragment) *DataFragment {
+	if !data.IsCompressed || len(data.Buffer) == 0 {
+		return data
+	}
+
+	uncompressedSize := data.SizeUncompressed
+
+	if uncompressedSize == 0 {
+		return data
+	}
+
+	if data.SizeInBytes > 100000000 {
+		return data
+	}
+
+	// uncompress data
+	data.Buffer = utils.LZSSDecompress(data.Buffer)
+	data.SizeInBytes = uncompressedSize
+	data.IsCompressed = false
+
+	return data
 }
 
 // GetMessages returns all received complete messages (ie packets that
