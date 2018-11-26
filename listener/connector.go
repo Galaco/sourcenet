@@ -9,6 +9,15 @@ import (
 	"log"
 )
 
+// M = master, S = server, C = client, A = any
+const c2sConnect = 'k'
+const a2sGetChallenge = 'q'
+
+const s2cChallenge = 'A'
+const s2cConnection = 'B'
+const s2cConnectRejection = '9'
+
+const netTick = 3
 const netSignOnState = 6
 
 // Connector is a standard mechanism for connecting to source engine servers
@@ -25,6 +34,11 @@ type Connector struct {
 
 	activeClient   *sourcenet.Client
 	connectionStep int32
+
+	keepAliveSkips int32
+	tick int32
+	hostFrametime uint32
+	hostFrametimeDeviation uint32
 }
 
 // Register provides a mechanism for a listener to respond
@@ -43,6 +57,12 @@ func (listener *Connector) Receive(msg sourcenet.IMessage, msgType int) {
 		listener.handleConnectionless(msg)
 	}
 
+	if listener.keepAliveSkips > 7 {
+		send := message.KeepAlive(listener.tick, listener.hostFrametime, listener.hostFrametimeDeviation)
+		listener.activeClient.SendMessage(send, false)
+
+		listener.keepAliveSkips = 0
+	}
 }
 
 // InitialMessage Get the first message to initialize
@@ -61,12 +81,28 @@ func (listener *Connector) handleConnectionless(msg sourcenet.IMessage) {
 
 	switch packetType {
 	// 'A' is connection request acknowledgement.
-	// We are required to authenicate game ownership now.
-	case 'A':
+	// We are required to authenticate game ownership now.
+	case s2cChallenge:
 		listener.connectionStep = 2
 		packet.ReadInt32()
 		serverChallenge, _ := packet.ReadInt32()
 		clientChallenge, _ := packet.ReadInt32()
+
+		authprotocol,_ := packet.ReadInt32()
+
+		steamkey_encryptionsize,_ := packet.ReadInt16() // gotta be 0
+
+		//steamkey_encryptionkey,_ := packet.ReadBytes(uint(steamkey_encryptionsize))
+		packet.ReadBytes(uint(steamkey_encryptionsize))
+
+		//serversteamid,_ := packet.ReadBits(2048)
+		packet.ReadBits(2048)
+		vacsecured,_ := packet.ReadByte()
+
+		log.Printf("Challenge: %d, Auth: %d, SKey: %d, VAC: %d\n", uint32(serverChallenge), uint32(clientChallenge), authprotocol, vacsecured)
+
+		listener.activeClient.Channel().ServerChallenge = serverChallenge
+		listener.activeClient.Channel().ClientChallenge = clientChallenge
 
 		listener.serverChallenge = serverChallenge
 		listener.clientChallenge = clientChallenge
@@ -88,7 +124,7 @@ func (listener *Connector) handleConnectionless(msg sourcenet.IMessage) {
 		listener.activeClient.SendMessage(msg, false)
 	// 'B' is successful authentication.
 	// Now send some user info bits.
-	case 'B':
+	case s2cConnection:
 		if listener.connectionStep == 2 {
 			log.Println("Connected successfully")
 			listener.connectionStep = 3
@@ -106,11 +142,12 @@ func (listener *Connector) handleConnectionless(msg sourcenet.IMessage) {
 			senddata.WriteString("vban 0 0 0 0")
 			senddata.WriteByte(0)
 
-			listener.activeClient.SendMessage(message.NewGeneric(senddata.Data()), false)
+			listener.activeClient.SendMessage(message.NewGenericDatagram(senddata.Data()), false)
 		}
+		listener.keepAliveSkips++
 	// '9' Connection was refused. A reason
 	// is usually provided.
-	case '9':
+	case s2cConnectRejection:
 		packet.ReadInt32() // Not needed
 		reason, _ := packet.ReadString(1024)
 		log.Printf("Connection refused. Reason: %s\n", reason)
@@ -121,9 +158,16 @@ func (listener *Connector) handleConnectionless(msg sourcenet.IMessage) {
 
 // handleConnected Connected message handler
 func (listener *Connector) handleConnected(msg sourcenet.IMessage, msgType int) {
-	log.Println(msgType)
-	if msgType != netSignOnState {
+	switch msgType {
+	case netSignOnState:
+		log.Println("SignOnState")
 		return
+	case netTick:
+		log.Println("Tick")
+		buf := bitbuf.NewReader(msg.Data())
+		listener.tick,_ = buf.ReadInt32()
+		listener.hostFrametime,_ = buf.ReadUint32Bits(16)
+		listener.hostFrametimeDeviation,_ = buf.ReadUint32Bits(16)
 	}
 }
 
@@ -136,5 +180,6 @@ func NewConnector(activeClient *sourcenet.Client, playerName string, password st
 		gameVersion:     gameVersion,
 		clientChallenge: clientChallenge,
 		connectionStep:  1,
+		keepAliveSkips:  0,
 	}
 }

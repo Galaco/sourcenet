@@ -57,6 +57,9 @@ type Channel struct {
 	subChannels [maxSubChannels]SubChannel
 	waiting     [maxStreams][]*DataFragment
 
+	ClientChallenge int32
+	ServerChallenge int32
+
 	challengeValue         int32
 	challengeValueInStream bool
 
@@ -94,8 +97,12 @@ func (channel *Channel) WriteHeader(msg IMessage, subchans bool) IMessage {
 		flags |= packetFlagReliable
 	}
 
+	//if channel.challengeValueInStream {
+	//	senddata.WriteInt32(channel.ServerChallenge)
+	//}
+
 	senddata.WriteBytes(msg.Data()) // Data
-	for senddata.BytesWritten() < minRoutablePayload && senddata.BitsWritten()%8 != 0 {
+	for senddata.BytesWritten() < minRoutablePayload && senddata.BitsWritten() % 8 != 0 {
 		senddata.WriteUnsignedBitInt32(0, netmsgTypeBits)
 	}
 
@@ -109,7 +116,7 @@ func (channel *Channel) WriteHeader(msg IMessage, subchans bool) IMessage {
 		if nCheckSumBytes > 0 {
 			checksum := crc.CRC32(senddata.Data()[checksumStart:])
 
-			senddata.Seek(uint(checksumStart * 8))
+			senddata.Seek(uint(checksumStart * 8) - 16) // checksum is 16bits, so seek back 2 bytes before start of cc'd data
 			senddata.WriteUint16(checksum)
 			senddata.Seek(senddata.BitsWritten())
 
@@ -315,6 +322,7 @@ func (channel *Channel) ReadHeader(msg IMessage) (flags int32, headerSize int32)
 		channel.challengeValueInStream = true
 	} else if channel.challengeValueInStream == true {
 		// stream contains challenge, but not provided?
+		log.Println("Bad packet: Challenge value included, but not provided")
 		return -1, -1
 	}
 

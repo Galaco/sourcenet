@@ -97,6 +97,10 @@ func (client *Client) process() {
 	}
 }
 
+func (client *Client) Channel() *Channel {
+	return client.channel
+}
+
 // NewClient returns a new client object
 func NewClient() *Client {
 	return &Client{
