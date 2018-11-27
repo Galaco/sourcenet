@@ -62,6 +62,7 @@ type Channel struct {
 
 	challengeValue         int32
 	challengeValueInStream bool
+	challengeValueSkipCount int32
 
 	inSequenceCounter              int32
 	outSequenceCounter             int32
@@ -97,12 +98,19 @@ func (channel *Channel) WriteHeader(msg IMessage, subchans bool) IMessage {
 		flags |= packetFlagReliable
 	}
 
-	//if channel.challengeValueInStream {
-	//	senddata.WriteInt32(channel.ServerChallenge)
-	//}
+	if channel.challengeValueInStream == true {
+		if channel.challengeValueSkipCount > 7 {
+			log.Printf("Challenge in stream: %t, value: %d\n", channel.challengeValueInStream, channel.ServerChallenge)
+			senddata.WriteInt32(channel.ServerChallenge)
+			channel.challengeValueSkipCount = 0
+		}
+		channel.challengeValueInStream = false
+		channel.challengeValueSkipCount++
+	}
 
 	senddata.WriteBytes(msg.Data()) // Data
 	for senddata.BytesWritten() < minRoutablePayload && senddata.BitsWritten() % 8 != 0 {
+		log.Println("in loop WriteHeader")
 		senddata.WriteUnsignedBitInt32(0, netmsgTypeBits)
 	}
 
@@ -143,7 +151,6 @@ func (channel *Channel) ProcessPacket(msg IMessage) bool {
 	header, _ := recvdata.ReadUint32()
 
 	if header == packetHeaderFlagSplit {
-
 		if channel.HandleSplitPacket(recvdata) == 0 {
 			return false
 		}
@@ -179,6 +186,7 @@ func (channel *Channel) ProcessPacket(msg IMessage) bool {
 
 	recvdata.Seek(0)
 
+	//size is in bits!
 	flags, headerSize := channel.ReadHeader(msg)
 	if flags == -1 {
 		return false
@@ -205,9 +213,10 @@ func (channel *Channel) ProcessPacket(msg IMessage) bool {
 		}
 	}
 
-	if len(msg.Data()[headerSize:]) > 0 {
+	//if len(msg.Data()[headerSize:]) > 0 {
+	headerSize = int32(utils.PadNumber(uint32(headerSize), 8))
 		channel.messages = append(channel.messages, message.NewGeneric(msg.Data()[headerSize:]))
-	}
+	//}
 
 	if channel.WaitingOnFragments() || flags&packetFlagTables != 0 {
 		channel.needFragments = true
@@ -344,8 +353,6 @@ func (channel *Channel) ReadHeader(msg IMessage) (flags int32, headerSize int32)
 		flags |= packetFlagTables
 	}
 
-	headerSize = utils.PadNumber(int32(message.BitsRead()), 8) / 8
-
 	return flags, headerSize
 }
 
@@ -371,8 +378,7 @@ func (channel *Channel) readSubChannelData(buf *bitbuf.Reader, stream int) bool 
 		data.IsCompressed = false
 		data.TransferID = 0
 
-		if singleBlock {
-
+		if singleBlock == true {
 			// data compressed ?
 			if buf.ReadOneBit() == true {
 				data.IsCompressed = true
@@ -382,7 +388,6 @@ func (channel *Channel) readSubChannelData(buf *bitbuf.Reader, stream int) bool 
 			}
 
 			data.SizeInBytes, _ = buf.ReadUint32()
-
 		} else {
 			// is it a file ?
 			if buf.ReadOneBit() == true {
@@ -399,7 +404,16 @@ func (channel *Channel) readSubChannelData(buf *bitbuf.Reader, stream int) bool 
 			}
 
 			data.SizeInBytes, _ = buf.ReadUint32Bits(maxFileSizeBits)
+		}
 
+		if data.SizeInBytes < 0 {
+			log.Println("Subchannel buffer size smaller than 0. This should not be possible")
+			return false
+		}
+
+		if data.SizeInBytes > maxFileSize {
+			log.Println("Subchannel buffer size beyond max limit. This should not be possible")
+			return false
 		}
 
 		if len(data.Buffer) > 0 {
@@ -408,12 +422,12 @@ func (channel *Channel) readSubChannelData(buf *bitbuf.Reader, stream int) bool 
 		}
 
 		data.SizeInBits = data.SizeInBytes * 8
-		data.Buffer = make([]byte, utils.PadNumber(int32(data.SizeInBytes), 4))
+		data.Buffer = make([]byte, utils.PadNumber(data.SizeInBytes, 4))
 		data.AsTCP = false
 		data.NumFragments = int32((data.SizeInBytes + fragmentSize - 1) / fragmentSize)
 		data.AcknowledgedFragments = 0
 
-		if singleBlock {
+		if singleBlock == true {
 			numFragments = data.NumFragments
 			length = uint(numFragments * fragmentSize)
 		}
@@ -494,6 +508,8 @@ func (channel *Channel) checkWaitingList(i int) {
 		// All fragments sent
 		// Remove from waiting list
 		for j := 0; j < len(channel.waiting[i]); j++ {
+
+			log.Println("in loop checkWaitingList")
 			if channel.waiting[i][j] == data {
 				channel.waiting[i] = append(channel.waiting[i][:j], channel.waiting[i][j+1:]...)
 				break
@@ -548,6 +564,7 @@ func NewChannel() *Channel {
 		inReliableState:                0,
 		challengeValueInStream:         false,
 		challengeValue:                 0,
+		challengeValueSkipCount:		0,
 	}
 
 	for i := 0; i < maxSubChannels; i++ {

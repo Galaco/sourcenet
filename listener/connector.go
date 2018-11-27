@@ -39,6 +39,8 @@ type Connector struct {
 	tick int32
 	hostFrametime uint32
 	hostFrametimeDeviation uint32
+
+	shouldDisconnect bool
 }
 
 // Register provides a mechanism for a listener to respond
@@ -58,11 +60,13 @@ func (listener *Connector) Receive(msg sourcenet.IMessage, msgType int) {
 	}
 
 	if listener.keepAliveSkips > 7 {
-		send := message.KeepAlive(listener.tick, listener.hostFrametime, listener.hostFrametimeDeviation)
-		listener.activeClient.SendMessage(send, false)
+		//message.KeepAlive(listener.tick, listener.hostFrametime, listener.hostFrametimeDeviation)
+		listener.activeClient.SendMessage(message.NewGenericDatagram(make([]byte, 0)), false)
 
 		listener.keepAliveSkips = 0
 	}
+
+	listener.keepAliveSkips++
 }
 
 // InitialMessage Get the first message to initialize
@@ -143,12 +147,20 @@ func (listener *Connector) handleConnectionless(msg sourcenet.IMessage) {
 			senddata.WriteByte(0)
 
 			listener.activeClient.SendMessage(message.NewGenericDatagram(senddata.Data()), false)
+
+			go func() {
+				if listener.shouldDisconnect == true {
+					return
+				}
+				// Some sort of keep alive
+			}()
+		} else {
+			listener.activeClient.SendMessage(message.NewGeneric(make([]byte, 0)), false)
 		}
-		listener.keepAliveSkips++
 	// '9' Connection was refused. A reason
 	// is usually provided.
 	case s2cConnectRejection:
-		packet.ReadInt32() // Not needed
+		packet.ReadInt32() // contents not needed
 		reason, _ := packet.ReadString(1024)
 		log.Printf("Connection refused. Reason: %s\n", reason)
 	default:
@@ -169,6 +181,40 @@ func (listener *Connector) handleConnected(msg sourcenet.IMessage, msgType int) 
 		listener.hostFrametime,_ = buf.ReadUint32Bits(16)
 		listener.hostFrametimeDeviation,_ = buf.ReadUint32Bits(16)
 	}
+
+
+/*
+	SendClientInfo()
+	// tell server that we entered now that state
+	m_NetChannel->SendNetMsg( NET_SignonState( m_nSignonState, m_nServerCount ) );
+
+
+void CClientState::SendClientInfo( void )
+{
+	CLC_ClientInfo info;
+
+	info.m_nSendTableCRC = SendTable_GetCRC();
+	info.m_nServerCount = m_nServerCount;
+	info.m_bIsHLTV = false;
+#if !defined( NO_STEAM )
+	info.m_nFriendsID = SteamUser() ? SteamUser()->GetSteamID().GetAccountID() : 0;
+#else
+	info.m_nFriendsID = 0;
+#endif
+	Q_strncpy( info.m_FriendsName, m_FriendsName, sizeof(info.m_FriendsName) );
+
+	CheckOwnCustomFiles(); // load & verfiy custom player files
+
+	for ( int i=0; i< MAX_CUSTOM_FILES; i++ )
+		info.m_nCustomFiles[i] = m_nCustomFiles[i].crc;
+
+	m_NetChannel->SendNetMsg( info );
+}
+ */
+}
+
+func (listener *Connector) Disconnect() {
+	listener.activeClient.Disconnect(message.Disconnect(listener.serverChallenge))
 }
 
 // NewConnector returns a new connector object.

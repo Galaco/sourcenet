@@ -23,6 +23,11 @@ func (conn *Connection) Receive() IMessage {
 	return message.NewGeneric(buf)
 }
 
+// Disconnect from the active server
+func (conn *Connection) Disconnect() {
+	conn.proto.Close()
+}
+
 // Connect: Establishes a connection with a server.
 // Only ensures target ip:port is reachable.
 func Connect(host string, port string) (*Connection, error) {
