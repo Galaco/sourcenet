@@ -2,23 +2,23 @@ package message
 
 import "github.com/galaco/bitbuf"
 
-// QueryServerInfo is a connectionless request to a server to obtain
+// MsgQueryServerInfo is a connectionless request to a server to obtain
 // basic information about its current status
 type MsgQueryServerInfo struct {
 	buf *bitbuf.Writer
 }
 
-// Connectionless: is this message a connectionless message?
+// Connectionless is this message a connectionless message?
 func (msg *MsgQueryServerInfo) Connectionless() bool {
 	return true
 }
 
-// Data Get packet data
+// Data Gets packet data
 func (msg *MsgQueryServerInfo) Data() []byte {
 	return msg.buf.Data()
 }
 
-// Disconnect returns new disconnect packet data
+// QueryServerInfo returns a packet to request server information
 func QueryServerInfo() *MsgQueryServerInfo {
 	buf := bitbuf.NewWriter(64)
 	buf.WriteByte(255)

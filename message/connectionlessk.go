@@ -2,11 +2,12 @@ package message
 
 import "github.com/galaco/bitbuf"
 
+// MsgConnectionlessK is the authentication challenge response
 type MsgConnectionlessK struct {
 	buf *bitbuf.Writer
 }
 
-// Connectionless: is this message a connectionless message?
+// Connectionless is this message a connectionless message?
 func (msg *MsgConnectionlessK) Connectionless() bool {
 	return true
 }
@@ -16,7 +17,7 @@ func (msg *MsgConnectionlessK) Data() []byte {
 	return msg.buf.Data()
 }
 
-// Disconnect returns new disconnect packet data
+// ConnectionlessK provides the initial authentication packet
 func ConnectionlessK(clientChallenge int32, serverChallenge int32, playerName string, password string, gameVersion string, steamId uint64, steamKey []byte) *MsgConnectionlessK {
 	senddata := bitbuf.NewWriter(1000)
 	senddata.WriteByte(255)

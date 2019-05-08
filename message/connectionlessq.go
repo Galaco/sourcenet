@@ -2,11 +2,12 @@ package message
 
 import "github.com/galaco/bitbuf"
 
+// MsgConnectionlessQ is the first contact with a server packet
 type MsgConnectionlessQ struct {
 	buf *bitbuf.Writer
 }
 
-// Connectionless: is this message a connectionless message?
+// Connectionless is this message a connectionless message?
 func (msg *MsgConnectionlessQ) Connectionless() bool {
 	return true
 }
@@ -16,7 +17,7 @@ func (msg *MsgConnectionlessQ) Data() []byte {
 	return msg.buf.Data()
 }
 
-// Disconnect returns new disconnect packet data
+// ConnectionlessQ returns a new packet
 func ConnectionlessQ(clientChallenge int32) *MsgConnectionlessQ {
 	buf := bitbuf.NewWriter(1024)
 

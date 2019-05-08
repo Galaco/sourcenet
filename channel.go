@@ -28,18 +28,25 @@ type DataFragment struct {
 	AsTCP                 bool // Send as TCP stream
 	NumFragments          int32
 	AcknowledgedFragments int32 // Fragments sent and acknowledges
-	PendingFragments      int32 // Fragments sent, but not (yet) acknolwedged
+	PendingFragments      int32 // Fragments sent, but not (yet) acknowledged
 	FragmentOffsets       []int32
 }
 
+// SubChannel is primarily used for splitting packet types up in the primary channel
 type SubChannel struct {
-	FirstFragment       [maxStreams]int32
-	NumFragments        [maxStreams]int32
+	// FirstFragment is the first fragments
+	FirstFragment [maxStreams]int32
+	// NumFragments is the number of fragments that make up
+	NumFragments [maxStreams]int32
+	// SendSequenceCounter
 	SendSequenceCounter int32
-	State               int32 // 0=free, 1=scheduled to read, 2=send & waiting, 3=dirty
-	Index               int32 // index into containing channels subchannel array
+	// State 0=free, 1=scheduled to read, 2=send & waiting, 3=dirty
+	State int32
+	// Index into containing channels subchannel array
+	Index int32
 }
 
+// Free clears up the SubChannel
 func (channel *SubChannel) Free() {
 	channel.State = subChannelFree
 	channel.SendSequenceCounter = -1
@@ -206,6 +213,7 @@ func (channel *Channel) ProcessPacket(msg IMessage) bool {
 	return true
 }
 
+// WaitingOnFragments tests if the channel is expecting more fragments for a packet
 func (channel *Channel) WaitingOnFragments() bool {
 	for i := 0; i < maxStreams; i++ {
 		data := &channel.received[i] // get list
@@ -270,7 +278,7 @@ func (channel *Channel) ReadHeader(msg IMessage) (flags int32, headerSize int32)
 	flagsI8, _ := message.ReadInt8()
 	flags = int32(flagsI8)
 
-	checksum := uint16(0)
+	var checksum uint16
 
 	if skipChecksum == false {
 		checksum, _ = message.ReadUint16()

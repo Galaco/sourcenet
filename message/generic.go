@@ -1,10 +1,12 @@
 package message
 
+// Generic is a unknown message type. It should still contain the same header structure
+// as known packet types, but the payload is unknown
 type Generic struct {
 	data []byte
 }
 
-// Connectionless: is this message a connectionless message?
+// Connectionless is this message a connectionless message?
 func (msg *Generic) Connectionless() bool {
 	if len(msg.data) < 4 {
 		return false
@@ -16,11 +18,12 @@ func (msg *Generic) Connectionless() bool {
 	return false
 }
 
-// Data: Get packet data
+// Data gets packet data
 func (msg *Generic) Data() []byte {
 	return msg.data
 }
 
+// NewGeneric returns a new generic packet
 func NewGeneric(data []byte) *Generic {
 	return &Generic{
 		data: data,

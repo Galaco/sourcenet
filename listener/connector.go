@@ -72,8 +72,7 @@ func (listener *Connector) handleConnectionless(msg sourcenet.IMessage) {
 
 		localsid := steamworks.GetSteamID()
 		steamid64 := uint64(localsid)
-		steamKey := make([]byte, 2048)
-		steamKey, _ = steamauth.CreateTicket()
+		steamKey, _ := steamauth.CreateTicket()
 
 		msg := message.ConnectionlessK(
 			listener.clientChallenge,

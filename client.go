@@ -56,12 +56,13 @@ func (client *Client) SendMessage(msg IMessage, hasSubChannels bool) bool {
 	return true
 }
 
+// AddListener adds a callback handler for packet data
 func (client *Client) AddListener(target IListener) {
 	target.Register(client)
 	client.listeners = append(client.listeners, target)
 }
 
-// receive Goroutine that receives messages as they come in.
+// Receive Goroutine that receives messages as they come in.
 // This adds messages to the end of a received queue, so its possible they may be delayed in processing
 func (client *Client) receive() {
 	for true {

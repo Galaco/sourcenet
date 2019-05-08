@@ -30,15 +30,17 @@ func main() {
 	reader.ReadString('\n')
 }
 
-// Callback struct for out client
+// QueryInfoReceiver is a Callback struct for out client
 // The client operates by passing received messages into listeners to process expected packets
 type QueryInfoReceiver struct {
 }
 
+// Register fulfills interface
 func (listener *QueryInfoReceiver) Register(client *sourcenet.Client) {
 
 }
 
+// Receive is a handler for server response packets
 func (listener *QueryInfoReceiver) Receive(msg sourcenet.IMessage, msgType int) {
 	data := msg.Data()
 
