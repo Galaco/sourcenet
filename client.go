@@ -35,6 +35,14 @@ func (client *Client) Connect(host string, port string) error {
 	return nil
 }
 
+// Disconnect ends the socket connection.
+// This must not be confused with sending the disconnect packet to
+// a server. Failure to send a disconnect packet before calling Disconnect() will
+// result in the server waiting for client packets until it times out.
+func (client *Client) Disconnect() {
+	client.net.proto.Close()
+}
+
 // SendMessage send a message to connected server
 func (client *Client) SendMessage(msg IMessage, hasSubChannels bool) bool {
 	if msg == nil || msg.Connectionless() == false {

@@ -1,6 +1,13 @@
-# Network
+[![GoDoc](https://godoc.org/github.com/Galaco/sourcenet?status.svg)](https://godoc.org/github.com/Galaco/sourcenet)
+[![Go report card](https://goreportcard.com/badge/github.com/galaco/sourcenet)](https://goreportcard.com/badge/github.com/galaco/sourcenet)
+[![GolangCI](https://golangci.com/badges/github.com/galaco/sourcenet.svg)](https://golangci.com)
+[![Build Status](https://travis-ci.com/Galaco/sourcenet.svg?branch=master)](https://travis-ci.com/Galaco/sourcenet)
+[![CircleCI](https://circleci.com/gh/Galaco/sourcenet.svg?style=svg)](https://circleci.com/gh/Galaco/sourcenet)
 
-A Source Engine multiplayer client netcode implementation in Golang. This
+# SourceNet
+
+A Source Engine multiplayer client netcode implementation in Golang. This is very incomplete, and is based primarily on
+reverse engineering cs:source packet data, with a little help from the Source Engine code leaks (also see credits).
 
 
 ### Getting started

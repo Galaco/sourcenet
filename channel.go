@@ -94,7 +94,7 @@ func (channel *Channel) WriteHeader(msg IMessage, subchans bool) IMessage {
 	}
 
 	senddata.WriteBytes(msg.Data()) // Data
-	for senddata.BytesWritten() < minRoutablePayload && senddata.BitsWritten() % 8 != 0 {
+	for senddata.BytesWritten() < minRoutablePayload && senddata.BitsWritten()%8 != 0 {
 		senddata.WriteUnsignedBitInt32(0, netmsgTypeBits)
 	}
 
