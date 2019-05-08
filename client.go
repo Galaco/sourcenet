@@ -1,6 +1,7 @@
 package sourcenet
 
 import (
+	"context"
 	"github.com/galaco/bitbuf"
 	"sync"
 )
@@ -16,6 +17,8 @@ type Client struct {
 	receiveQueueMutex sync.Mutex
 
 	listeners []IListener
+
+	disconnectCallback context.CancelFunc
 }
 
 // Connect Connects to a Source Engine Server
@@ -29,8 +32,11 @@ func (client *Client) Connect(host string, port string) error {
 
 	// Setup our sending and processing routines
 	// These will just run forever, receiving messages, and processing the received queue
-	go client.receive()
-	go client.process()
+	ctx, cancel := context.WithCancel(context.Background())
+	client.disconnectCallback = cancel
+
+	go client.receive(ctx)
+	go client.process(ctx)
 
 	return nil
 }
@@ -40,7 +46,8 @@ func (client *Client) Connect(host string, port string) error {
 // a server. Failure to send a disconnect packet before calling Disconnect() will
 // result in the server waiting for client packets until it times out.
 func (client *Client) Disconnect() {
-	client.net.proto.Close()
+	client.disconnectCallback()
+	defer client.net.proto.Close()
 }
 
 // SendMessage send a message to connected server
@@ -64,8 +71,13 @@ func (client *Client) AddListener(target IListener) {
 
 // Receive Goroutine that receives messages as they come in.
 // This adds messages to the end of a received queue, so its possible they may be delayed in processing
-func (client *Client) receive() {
+func (client *Client) receive(ctx context.Context) {
 	for true {
+		select {
+		case <- ctx.Done():
+			return
+		default:
+		}
 		client.channel.ProcessPacket(client.net.Receive())
 		if client.channel.WaitingOnFragments() == true {
 			// @TODO send
@@ -80,10 +92,15 @@ func (client *Client) receive() {
 // from the queue.
 // This will not empty the queue each loop, but will process all messages that existed at the
 // start of each loop
-func (client *Client) process() {
+func (client *Client) process(ctx context.Context) {
 	queueSize := 0
 	i := 0
 	for true {
+		select {
+		case <- ctx.Done():
+			return
+		default:
+		}
 		queueSize = len(client.receivedQueue)
 		if queueSize == 0 {
 			continue
