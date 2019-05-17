@@ -72,6 +72,13 @@ func (client *Client) AddListener(target IListener) {
 // Receive Goroutine that receives messages as they come in.
 // This adds messages to the end of a received queue, so its possible they may be delayed in processing
 func (client *Client) receive(ctx context.Context) {
+	// @TODO Find a way to report errors
+	defer func() {
+		r := recover()
+		if _, ok := r.(error); ok {
+			_ = ctx.Done()
+		}
+	}()
 	for true {
 		select {
 		case <- ctx.Done():
@@ -93,6 +100,13 @@ func (client *Client) receive(ctx context.Context) {
 // This will not empty the queue each loop, but will process all messages that existed at the
 // start of each loop
 func (client *Client) process(ctx context.Context) {
+	// @TODO Find a way to report errors
+	defer func() {
+		r := recover()
+		if _, ok := r.(error); ok {
+			_ = ctx.Done()
+		}
+	}()
 	queueSize := 0
 	i := 0
 	for true {
@@ -107,6 +121,11 @@ func (client *Client) process(ctx context.Context) {
 		}
 
 		for i = 0; i < queueSize; i++ {
+			// @TODO There seems to very rarely be a race condition that could cause a packet to be processed twice.
+			// Should be properly fixed, but skipping the item works too.
+			if client.receivedQueue[i] == nil {
+				continue
+			}
 			// Do actual processing
 			msgType := uint32(packetHeaderFlagQuery)
 			if client.receivedQueue[i].Connectionless() == true {
