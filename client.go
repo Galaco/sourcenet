@@ -45,9 +45,12 @@ func (client *Client) Connect(host string, port string) error {
 // This must not be confused with sending the disconnect packet to
 // a server. Failure to send a disconnect packet before calling Disconnect() will
 // result in the server waiting for client packets until it times out.
-func (client *Client) Disconnect() {
-	client.disconnectCallback()
+func (client *Client) Disconnect(msg IMessage) {
+	if msg != nil {
+		client.SendMessage(msg, false)
+	}
 	defer client.net.proto.Close()
+	client.disconnectCallback()
 }
 
 // SendMessage send a message to connected server
@@ -81,7 +84,7 @@ func (client *Client) receive(ctx context.Context) {
 	}()
 	for true {
 		select {
-		case <- ctx.Done():
+		case <-ctx.Done():
 			return
 		default:
 		}
@@ -111,7 +114,7 @@ func (client *Client) process(ctx context.Context) {
 	i := 0
 	for true {
 		select {
-		case <- ctx.Done():
+		case <-ctx.Done():
 			return
 		default:
 		}

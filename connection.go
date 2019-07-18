@@ -1,6 +1,7 @@
 package sourcenet
 
 import (
+	"fmt"
 	"github.com/galaco/sourcenet/message"
 	"net"
 )
@@ -19,19 +20,20 @@ func (conn *Connection) Send(msg IMessage) (length int, err error) {
 // Receive waits for a message from connected server
 func (conn *Connection) Receive() IMessage {
 	buf := make([]byte, 2048)
-	conn.proto.Read(buf)
+	if _, err := conn.proto.Read(buf); err != nil {
+		return message.NewGeneric(buf).WithError(err)
+	}
 	return message.NewGeneric(buf)
 }
 
 // Connect Establishes a connection with a server.
 // Only ensures target ip:port is reachable.
 func Connect(host string, port string) (*Connection, error) {
-	conn := Connection{}
-	proto, err := net.Dial("udp", host+":"+port)
+	proto, err := net.Dial("udp", fmt.Sprintf("%s:%s", host, port))
 	if err != nil {
 		return nil, err
 	}
-	conn.proto = proto
-
-	return &conn, nil
+	return &Connection{
+		proto: proto,
+	}, nil
 }

@@ -12,18 +12,19 @@ import (
 
 func main() {
 	// REQUIRES STEAM RUNNING
-	err := steamworks.InitClient(true)
-	if err != nil {
-		log.Println(err)
+	if err := steamworks.InitClient(true); err != nil {
+		panic(err)
 	}
 	// target server
-	host := "142.44.143.138"
+	host := "151.80.230.149"
 	port := "27015"
 
 	// Connect to host
 	client := sourcenet.NewClient()
-	client.Connect(host, port)
-	defer client.SendMessage(message.Disconnect(), false)
+	if err := client.Connect(host, port); err != nil {
+		panic(err)
+	}
+	defer client.Disconnect(message.Disconnect("Disconnect by User."))
 
 	// Add a receiver for our expected packet type
 	playerName := "DormantLemon^___"
@@ -40,5 +41,7 @@ func main() {
 	// Let us decide when to exit
 	reader := bufio.NewReader(os.Stdin)
 	log.Println("Enter anything to disconnect: ")
-	reader.ReadString('\n')
+	if _,err := reader.ReadString('\n'); err != nil {
+		panic(err)
+	}
 }

@@ -9,7 +9,9 @@ import (
 	"log"
 )
 
-const netSignOnState = 6
+const (
+	netSignOnState = 6
+)
 
 // Connector is a standard mechanism for connecting to source engine servers
 // Many games implement the same communication, particularly early games. It
@@ -54,24 +56,23 @@ func (listener *Connector) InitialMessage() sourcenet.IMessage {
 func (listener *Connector) handleConnectionless(msg sourcenet.IMessage) {
 	packet := bitbuf.NewReader(msg.Data())
 
-	packet.ReadInt32() // connectionless header
+	_,_ = packet.ReadInt32() // connectionless header
 
 	packetType, _ := packet.ReadUint8()
 
 	switch packetType {
 	// 'A' is connection request acknowledgement.
-	// We are required to authenicate game ownership now.
+	// We are required to authenticate game ownership now.
 	case 'A':
 		listener.connectionStep = 2
-		packet.ReadInt32()
+		_,_ = packet.ReadInt32()
 		serverChallenge, _ := packet.ReadInt32()
 		clientChallenge, _ := packet.ReadInt32()
 
 		listener.serverChallenge = serverChallenge
 		listener.clientChallenge = clientChallenge
 
-		localsid := steamworks.GetSteamID()
-		steamid64 := uint64(localsid)
+		steamId64 := uint64(steamworks.GetSteamID())
 		steamKey, _ := steamauth.CreateTicket()
 
 		msg := message.ConnectionlessK(
@@ -80,7 +81,7 @@ func (listener *Connector) handleConnectionless(msg sourcenet.IMessage) {
 			listener.playerName,
 			listener.password,
 			listener.gameVersion,
-			steamid64,
+			steamId64,
 			steamKey)
 
 		listener.activeClient.SendMessage(msg, false)
@@ -91,25 +92,25 @@ func (listener *Connector) handleConnectionless(msg sourcenet.IMessage) {
 			log.Println("Connected successfully")
 			listener.connectionStep = 3
 
-			senddata := bitbuf.NewWriter(2048)
+			sendData := bitbuf.NewWriter(2048)
 
-			senddata.WriteUnsignedBitInt32(6, 6)
-			senddata.WriteByte(2)
-			senddata.WriteInt32(-1)
+			sendData.WriteUnsignedBitInt32(6, 6)
+			sendData.WriteByte(2)
+			sendData.WriteInt32(-1)
 
-			senddata.WriteUnsignedBitInt32(4, 8)
-			senddata.WriteBytes([]byte("VModEnable 1"))
-			senddata.WriteByte(0)
-			senddata.WriteUnsignedBitInt32(4, 6)
-			senddata.WriteString("vban 0 0 0 0")
-			senddata.WriteByte(0)
+			sendData.WriteUnsignedBitInt32(4, 8)
+			sendData.WriteBytes([]byte("VModEnable 1"))
+			sendData.WriteByte(0)
+			sendData.WriteUnsignedBitInt32(4, 6)
+			sendData.WriteString("vban 0 0 0 0")
+			sendData.WriteByte(0)
 
-			listener.activeClient.SendMessage(message.NewGeneric(senddata.Data()), false)
+			listener.activeClient.SendMessage(message.NewGeneric(sendData.Data()), false)
 		}
 	// '9' Connection was refused. A reason
 	// is usually provided.
 	case '9':
-		packet.ReadInt32() // Not needed
+		_,_ = packet.ReadInt32() // Not needed
 		reason, _ := packet.ReadString(1024)
 		log.Printf("Connection refused. Reason: %s\n", reason)
 	default:

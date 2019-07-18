@@ -4,6 +4,14 @@ package message
 // as known packet types, but the payload is unknown
 type Generic struct {
 	data []byte
+	err  error
+}
+
+// WithError associate an error with this message.
+// Errors would tend to be related to malformed data.
+func (msg *Generic) WithError(err error) *Generic {
+	msg.err = err
+	return msg
 }
 
 // Connectionless is this message a connectionless message?

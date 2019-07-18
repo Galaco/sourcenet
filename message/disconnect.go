@@ -17,11 +17,11 @@ func (msg *MsgDisconnect) Data() []byte {
 }
 
 // Disconnect returns new disconnect packet data
-func Disconnect() *MsgDisconnect {
+func Disconnect(msg string) *MsgDisconnect {
 	buf := bitbuf.NewWriter(1024)
 
 	buf.WriteUnsignedBitInt32(1, 6)
-	buf.WriteString("Disconnect by User.")
+	buf.WriteString(msg)
 	buf.WriteByte(0)
 
 	return &MsgDisconnect{

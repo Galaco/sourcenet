@@ -11,12 +11,15 @@ import (
 
 func main() {
 	// target server
-	host := "142.44.143.138"
+	host := "151.80.230.149"
 	port := "27015"
 
 	// Connect to host
 	client := sourcenet.NewClient()
-	client.Connect(host, port)
+	if err := client.Connect(host, port); err != nil {
+		panic(err)
+	}
+	defer client.Disconnect(nil)
 
 	// Add a receiver for our expected packet type
 	client.AddListener(&QueryInfoReceiver{})
@@ -27,7 +30,9 @@ func main() {
 	// Let us decide when to exit
 	reader := bufio.NewReader(os.Stdin)
 	log.Println("Enter anything to disconnect: ")
-	reader.ReadString('\n')
+	if _, err := reader.ReadString('\n'); err != nil {
+		panic(err)
+	}
 }
 
 // QueryInfoReceiver is a Callback struct for out client
@@ -43,6 +48,7 @@ func (listener *QueryInfoReceiver) Register(client *sourcenet.Client) {
 // Receive is a handler for server response packets
 func (listener *QueryInfoReceiver) Receive(msg sourcenet.IMessage, msgType int) {
 	data := msg.Data()
+	log.Println(strings.Split(string(data), "\x00"))
 
 	props := strings.Split(string(data[6:]), "\x00")
 	log.Println("Server name: " + props[0])
