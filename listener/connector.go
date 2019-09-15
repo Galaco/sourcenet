@@ -1,11 +1,11 @@
 package listener
 
 import (
-	"github.com/BenLubar/steamworks"
-	"github.com/BenLubar/steamworks/steamauth"
 	"github.com/galaco/bitbuf"
 	"github.com/galaco/sourcenet"
 	"github.com/galaco/sourcenet/message"
+	"github.com/golang-source-engine/steamworks"
+	"github.com/golang-source-engine/steamworks/steamauth"
 	"log"
 )
 

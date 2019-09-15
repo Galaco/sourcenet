@@ -2,7 +2,7 @@ package sourcenet
 
 import (
 	"github.com/galaco/bitbuf"
-	"github.com/galaco/source-tools-common/crc"
+	"github.com/golang-source-engine/checksum"
 	"github.com/galaco/sourcenet/message"
 	"github.com/galaco/sourcenet/utils"
 	"log"
@@ -113,10 +113,10 @@ func (channel *Channel) WriteHeader(msg IMessage, subchans bool) IMessage {
 	if checksumStart < senddata.BytesWritten() {
 		nCheckSumBytes := senddata.BytesWritten() - checksumStart
 		if nCheckSumBytes > 0 {
-			checksum := crc.CRC32(senddata.Data()[checksumStart:])
+			checksumSignature := checksum.CRC32(senddata.Data()[checksumStart:])
 
 			senddata.Seek(uint(checksumStart * 8))
-			senddata.WriteUint16(checksum)
+			senddata.WriteUint16(checksumSignature)
 			senddata.Seek(senddata.BitsWritten())
 
 			channel.outSequenceCounter++
@@ -278,17 +278,17 @@ func (channel *Channel) ReadHeader(msg IMessage) (flags int32, headerSize int32)
 	flagsI8, _ := message.ReadInt8()
 	flags = int32(flagsI8)
 
-	var checksum uint16
+	var checksumSignature uint16
 
 	if skipChecksum == false {
-		checksum, _ = message.ReadUint16()
+		checksumSignature, _ = message.ReadUint16()
 
 		offset := message.BitsRead() >> 3
 		checkSumBytes := message.Data()[offset:len(message.Data())]
-		dataCheckSum := crc.CRC32(checkSumBytes)
+		dataCheckSum := checksum.CRC32(checkSumBytes)
 
 		if skipChecksumValidation == false {
-			if dataCheckSum != checksum {
+			if dataCheckSum != checksumSignature {
 				// checksum mismatch
 				return -1, -1
 			}

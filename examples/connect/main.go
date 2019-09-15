@@ -2,10 +2,10 @@ package main
 
 import (
 	"bufio"
-	"github.com/BenLubar/steamworks"
 	"github.com/galaco/sourcenet"
 	"github.com/galaco/sourcenet/listener"
 	"github.com/galaco/sourcenet/message"
+	"github.com/golang-source-engine/steamworks"
 	"log"
 	"os"
 )
