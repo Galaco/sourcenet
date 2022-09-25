@@ -1,6 +1,6 @@
 module github.com/galaco/sourcenet
 
-go 1.13
+go 1.19
 
 require (
 	github.com/galaco/bitbuf v1.1.0
